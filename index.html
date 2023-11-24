@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        html,
+        body {
+            overflow: hidden;
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas" style="z-index: -1; position: absolute"></canvas>
+    <script>
+        const dpr = window.devicePixelRatio
+        const canvas = document.getElementById('canvas')
+
+        const ctx = canvas.getContext('2d', { alpha: false })
+
+        const sessionId = "Anant" + (parseInt(localStorage.getItem("sessionCounter") || "0") + 1);
+        localStorage.setItem("sessionCounter", parseInt(sessionId.slice(5)));
+
+        document.title = sessionId
+
+        const sessionObj = { sessionId }
+        const sessionMap = new Map([[sessionId, sessionObj]])
+
+        const channel = new BroadcastChannel('position-channel')
+
+        const texts = ["Anant", "College", "Stress", "75% Attendance", "ST2"];
+
+        const drawLines = () => {
+            ctx.setTransform(1, 0, 0, 1, 0, 0)
+            ctx.scale(dpr, dpr)
+
+            ctx.fillStyle = '#f5f5f5'
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+            ctx.translate(-window.screenLeft, -window.screenTop)
+
+            const calcCenter = ({
+                innerWidth,
+                innerHeight,
+                screenLeft,
+                screenTop,
+            }) => [screenLeft + innerWidth / 2, screenTop + innerHeight / 2]
+
+            const centers = [...sessionMap.values()].map(calcCenter)
+            ctx.beginPath()
+            for (let i = 0; i < centers.length; i++) {
+                const ci = centers[i]
+                for (let j = i + 1; j < centers.length; j++) {
+                    ctx.moveTo(...ci)
+                    ctx.lineTo(...centers[j])
+                }
+            }
+            ctx.strokeStyle = 'black'
+            ctx.stroke()
+
+            for (const [x, y] of centers) {
+                const text = texts[parseInt(sessionId.slice(5)) % texts.length];
+                ctx.font = "35px Roboto, Arial, sans-serif";
+                ctx.fillStyle = '#333';
+                ctx.textAlign = 'center';
+                ctx.fillText(text, x, y);
+            }
+        }
+
+
+        const postPosition = () =>
+            setTimeout(() => channel.postMessage(sessionObj))
+
+        const resizeWindow = () => {
+            canvas.width = innerWidth * dpr
+            canvas.height = innerHeight * dpr
+
+            canvas.style.width = `${innerWidth}px`
+            canvas.style.height = `${innerHeight}px`
+
+            sessionObj.innerWidth = innerWidth
+            sessionObj.innerHeight = innerHeight
+
+            drawLines()
+            postPosition()
+        }
+
+        window.addEventListener('resize', resizeWindow)
+        resizeWindow()
+
+        const positionElem = () => {
+            if (
+                sessionObj.screenLeft === screenLeft &&
+                sessionObj.screenTop === screenTop
+            ) {
+                window.requestAnimationFrame(positionElem)
+                return
+            }
+            sessionObj.screenLeft = screenLeft
+            sessionObj.screenTop = screenTop
+
+            drawLines()
+
+            postPosition()
+            window.requestAnimationFrame(positionElem)
+        }
+
+        window.requestAnimationFrame(positionElem)
+
+        window.addEventListener('beforeunload', () => {
+            channel.postMessage({ sessionId, message: 'leaving' })
+            channel.close()
+        })
+
+        channel.addEventListener('message', ({ data }) => {
+            const { sessionId } = data
+            if (data.message === 'leaving') {
+                sessionMap.delete(sessionId)
+                explainer.hidden = sessionMap.size > 1
+            } else {
+                const sess = sessionMap.get(sessionId)
+                if (sess) Object.assign(sess, data)
+                else {
+                    postPosition()
+                    sessionMap.set(sessionId, data)
+                    explainer.hidden = sessionMap.size > 1
+                }
+                drawLines()
+            }
+        })
+    </script>
+</body>
+
+</html>
